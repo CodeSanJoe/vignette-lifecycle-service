@@ -1,42 +1,145 @@
 <?php
 
-namespace App\Http\Controllers;
-
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use App\Http\Requests\VignetteStoreRequest;
-use App\Services\VignetteLifecycleService;
-use App\Enums\Channel;
-use Exception;
-
 /**
- * 💡 LARAVEL INTEGRATION DEMO
- * * Diese Datei demonstriert, wie ich den 'VignetteLifecycleService' 
- * in eine moderne Laravel-Applikation integrieren würde.
- * * Konzepte:
- * - Dependency Injection (Service in Controller injizieren)
- * - Form Requests (Validierung vom Controller trennen)
- * - Exception Handling (HTTP Status Codes mappen)
+ * --------------------------------------------------------------------------
+ * VIGNETTE SYSTEM - COMPLETE DEMO
+ * --------------------------------------------------------------------------
+ * Diese Datei demonstriert den gesamten Stack:
+ * 1. Die Business Logik (Service)
+ * 2. Die Laravel Integration (Controller)
+ * 3. Die Simulation des Frameworks (Mocks)
  */
 
-class VignetteController extends Controller
-{
-    // PHP 8 Constructor Promotion: Der Service wird automatisch injiziert (DI)
+// ==========================================================================
+// 1. MOCKING FRAMEWORK (Simulation von Laravel)
+// ==========================================================================
+// Damit dieser Code überall läuft (auch ohne Laravel Installation),
+// simulieren wir hier die Basis-Klassen.
+
+if (!class_exists('Controller')) {
+    class Controller {}
+}
+
+class JsonResponse {
+    public function __construct(public mixed $data, public int $status = 200) {
+        // Wir geben das Ergebnis direkt aus, damit du es siehst
+        echo "\n--------------------------------------------------\n";
+        echo "📡 HTTP RESPONSE [Status: $status]\n";
+        echo "--------------------------------------------------\n";
+        if (is_array($data) && isset($data['error'])) {
+            echo "❌ FEHLER: " . $data['error'] . "\n";
+        } else {
+            echo "✅ ERFOLG: " . ($data['message'] ?? 'OK') . "\n";
+            if (isset($data['data'])) echo "   Details: " . $data['data'] . "\n";
+        }
+        echo "\n";
+    }
+}
+
+class FormRequest {
+    public function validated(): array {
+        // Simulation einer User-Eingabe für den Test
+        return [
+            'plate'       => 'W-12345',
+            'contact'     => 'test@beispiel.at',
+            'has_consent' => true,
+            'channel'     => 'E-Mail'
+        ];
+    }
+}
+
+if (!function_exists('response')) {
+    function response() {
+        return new class {
+            public function json($data, $status = 200) {
+                return new JsonResponse($data, $status);
+            }
+        };
+    }
+}
+
+// ==========================================================================
+// 2. BUSINESS LOGIC (Der Service)
+// ==========================================================================
+
+// Exceptions
+class PrivacyException extends Exception {}
+class VignetteDomainException extends Exception {}
+
+// Enum für Kanäle
+enum Channel: string {
+    case EMAIL = 'E-Mail';
+    case SMS = 'SMS';
+}
+
+// Value Object für Kennzeichen
+readonly class LicensePlate {
+    public string $formatted;
+    public string $regionCode;
+
+    public function __construct(string $input) {
+        $clean = strtoupper(preg_replace('/[^a-zA-Z0-9]/', '', $input));
+        
+        if (strlen($clean) < 3) {
+            throw new InvalidArgumentException("Kennzeichen zu kurz.");
+        }
+
+        $this->formatted = $clean;
+        // Einfache Logik: Wenn 2. Zeichen eine Ziffer ist, ist Bezirk 1 Buchstabe (W-1...), sonst 2 (KU-1...)
+        $this->regionCode = ctype_digit($clean[1] ?? '') ? substr($clean, 0, 1) : substr($clean, 0, 2);
+    }
+}
+
+// Der Service
+class VignetteLifecycleService {
+    private const VALID_DISTRICTS = ['W', 'KU', 'L', 'B', 'G', 'Z', 'AM', 'H', 'M', 'K']; 
+
+    public function registerExpirationReminder(
+        bool $hasConsent, 
+        string $plateInput, 
+        string $contact, 
+        Channel $channel
+    ): string {
+        // 1. DSGVO Check
+        if (!$hasConsent) {
+            throw new PrivacyException("Verarbeitung abgelehnt: Fehlender Consent.");
+        }
+
+        // 2. Validierung
+        $plate = new LicensePlate($plateInput);
+        if (!in_array($plate->regionCode, self::VALID_DISTRICTS)) {
+            throw new VignetteDomainException("Bezirk '{$plate->regionCode}' unbekannt.");
+        }
+
+        // 3. Logik
+        $expiryDate = new DateTimeImmutable('+5 days');
+        $reminderDate = $expiryDate->modify('-3 days');
+        
+        // 4. Output
+        return sprintf(
+            "Reminder gesetzt für %s (%s) am %s via %s",
+            $plate->formatted,
+            $contact,
+            $reminderDate->format('d.m.Y'),
+            $channel->value
+        );
+    }
+}
+
+// ==========================================================================
+// 3. LARAVEL INTEGRATION (Der Controller)
+// ==========================================================================
+
+class VignetteController extends Controller {
     public function __construct(
         private VignetteLifecycleService $vignetteService
     ) {}
 
-    /**
-     * API-Endpoint: POST /api/v1/reminders
-     */
-    public function store(VignetteStoreRequest $request): JsonResponse
-    {
+    public function store(FormRequest $request): JsonResponse {
         try {
-            // Die Daten sind hier bereits validiert (durch VignetteStoreRequest)
             $validated = $request->validated();
-
-            // Aufruf der Business-Logik (Service)
-            // Hinweis: Wir casten den String 'channel' zurück in das PHP Enum
+            
+            // Aufruf des Services
             $result = $this->vignetteService->registerExpirationReminder(
                 hasConsent: (bool) $validated['has_consent'],
                 plateInput: $validated['plate'],
@@ -44,53 +147,28 @@ class VignetteController extends Controller
                 channel:    Channel::from($validated['channel'])
             );
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Reminder erfolgreich angelegt.',
-                'details' => $result
-            ], 201); // HTTP 201 Created
+            return response()->json(['success' => true, 'message' => 'Gespeichert', 'data' => $result], 201);
 
-        } catch (\PrivacyException $e) {
-            // DSGVO-Fehler -> HTTP 403 Forbidden
-            return response()->json(['error' => $e->getMessage()], 403);
-
-        } catch (\VignetteDomainException $e) {
-            // Logik-Fehler (falscher Bezirk) -> HTTP 422 Unprocessable Entity
-            return response()->json(['error' => $e->getMessage()], 422);
-
+        } catch (PrivacyException $e) {
+            return response()->json(['error' => 'DSGVO: ' . $e->getMessage()], 403);
+        } catch (VignetteDomainException $e) {
+            return response()->json(['error' => 'Validierung: ' . $e->getMessage()], 422);
         } catch (Exception $e) {
-            // Sonstige Fehler -> HTTP 500 Internal Server Error
-            return response()->json(['error' => 'Serverfehler'], 500);
+            return response()->json(['error' => 'Serverfehler: ' . $e->getMessage()], 500);
         }
     }
 }
 
-/**
- * 💡 LARAVEL FORM REQUEST
- * Validiert den Input, BEVOR er den Controller erreicht.
- */
-class VignetteStoreRequest extends \Illuminate\Foundation\Http\FormRequest
-{
-    public function authorize(): bool
-    {
-        return true;
-    }
+// ==========================================================================
+// 4. TEST LAUF (Execution)
+// ==========================================================================
 
-    public function rules(): array
-    {
-        return [
-            'plate'       => ['required', 'string', 'min:3', 'max:10'],
-            'contact'     => ['required', 'string'],
-            'has_consent' => ['required', 'accepted'], // 'accepted' zwingt zu true/1/yes
-            'channel'     => ['required', 'string', 'in:E-Mail,SMS'], // Muss zum Enum passen
-        ];
-    }
+echo "🚀 START DES TESTS...\n";
 
-    public function messages(): array
-    {
-        return [
-            'has_consent.accepted' => 'Ohne Ihre Einwilligung (DSGVO) können wir keinen Reminder setzen.',
-            'plate.required'       => 'Bitte geben Sie ein Kennzeichen ein.',
-        ];
-    }
-}
+// Instanzieren
+$service = new VignetteLifecycleService();
+$controller = new VignetteController($service);
+$request = new FormRequest();
+
+// Ausführen
+$controller->store($request);
