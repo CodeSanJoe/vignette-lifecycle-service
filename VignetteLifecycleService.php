@@ -11,7 +11,7 @@ declare(strict_types=1);
  * - DSGVO-Compliance (Consent-Zwang & Double-Opt-In)
  * - PHP 8.2 Standards (Enums, Readonly, Typed Properties)
  * 
- * @author   Ihr Name
+ * @author   CodeSanJoe
  * @version  2.0
  * @license  MIT
  */
