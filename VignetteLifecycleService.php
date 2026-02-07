@@ -49,19 +49,28 @@ readonly class LicensePlate
             );
         }
 
-        // Schritt 3: Formatprüfung (muss mit 1-2 Buchstaben beginnen)
-        if (!preg_match('/^[A-Z]{1,2}[0-9]+[A-Z]*$/', $clean)) {
+        // Schritt 3: Grundlegendes Format prüfen (Buchstaben am Anfang, dann Zahlen)
+        if (!preg_match('/^[A-Z]+[0-9]+[A-Z]*$/', $clean)) {
             throw new InvalidArgumentException(
                 "Kennzeichen '$input' hat ungültiges Format. " .
                 "Erwartet: Buchstaben-Zahlen-Buchstaben (z.B. W-123 oder KU-456AB)."
             );
         }
 
-        // Schritt 4: Bezirkscode extrahieren
-        preg_match('/^([A-Z]{1,2})/', $clean, $matches);
+        // Schritt 4: Bezirkscode extrahieren (max. 2 Buchstaben sind in Österreich gültig)
+        preg_match('/^([A-Z]+)/', $clean, $matches);
+        $extractedCode = $matches[1];
+        
+        // Schritt 5: Prüfen ob Bezirkscode zu lang ist (österreichische Kennzeichen: max. 2 Buchstaben)
+        if (strlen($extractedCode) > 2) {
+            throw new InvalidArgumentException(
+                "Kennzeichen '$input' hat ungültiges Format. " .
+                "Bezirkscode '$extractedCode' ist zu lang (max. 2 Buchstaben erlaubt, z.B. W oder KU)."
+            );
+        }
         
         $this->formatted = $clean;
-        $this->regionCode = $matches[1];
+        $this->regionCode = $extractedCode;
     }
 
     /**
@@ -363,7 +372,7 @@ echo str_repeat("─", 63) . "\n";
 try {
     echo $service->registerExpirationReminder(
         hasConsent: true, 
-        plateInput: "XYZ-123", 
+        plateInput: "XX-123",  // XX ist kein gültiger österreichischer Bezirk
         contact: "test@test.at", 
         channel: Channel::EMAIL
     );
@@ -437,6 +446,28 @@ try {
     $testsPassed++;
 } catch (Exception $e) {
     echo "❌ TEST 7 FEHLGESCHLAGEN: " . $e->getMessage() . "\n\n";
+    $testsFailed++;
+}
+
+// --- TEST 8: Bezirkscode zu lang (mehr als 2 Buchstaben) ---
+echo "📌 TEST 8: Ungültiger Bezirkscode (zu lang: 3 Buchstaben)\n";
+echo str_repeat("─", 63) . "\n";
+try {
+    echo $service->registerExpirationReminder(
+        hasConsent: true, 
+        plateInput: "XYZ-123",  // 3 Buchstaben = ungültig
+        contact: "test@test.at", 
+        channel: Channel::EMAIL
+    );
+    echo "❌ TEST 8 FEHLGESCHLAGEN: Exception erwartet!\n\n";
+    $testsFailed++;
+} catch (InvalidArgumentException $e) {
+    echo "⚠️ ERWARTETER FORMAT-FEHLER:\n";
+    echo "   → " . $e->getMessage() . "\n";
+    echo "✅ TEST 8 BESTANDEN\n\n";
+    $testsPassed++;
+} catch (Exception $e) {
+    echo "❌ TEST 8 FEHLGESCHLAGEN: Falsche Exception: " . $e->getMessage() . "\n\n";
     $testsFailed++;
 }
 
