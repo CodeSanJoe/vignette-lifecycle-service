@@ -36,6 +36,32 @@ Eine integrierte **Test-Suite** am Ende der Datei simuliert verschiedene Szenari
 
 ---
 
+## 🚀 Laravel Integration (Enterprise Architecture)
+
+Neben der reinen PHP-Logik demonstriert die Datei [`Laravel_Integration_Demo.php`](./Laravel_Integration_Demo.php), wie dieser Prozess in einer skalierbaren **Laravel-Architektur** abgebildet wird. 
+
+Der Fokus liegt hier auf **Clean Code** und **Separation of Concerns**:
+
+### 🏗️ Architektur-Highlights
+
+* **🎮 Thin Controllers:** Der `VignetteController` steuert nur den Ablauf, enthält aber keine Geschäftslogik.
+* **request 🛡️ Form Requests:** Die Validierung (`VignetteStoreRequest`) ist vom Controller entkoppelt. Das garantiert, dass nur valide, saubere Daten die Applikationslogik erreichen.
+* **⚙️ Service Layer:** Die eigentliche Business-Logik (Berechnung, Speicherung) liegt isoliert im `VignetteService`. Dies macht den Code wiederverwendbar und testbar.
+* **json 🔌 JSON Responses:** Standardisierte API-Antworten (Status 201 Created, 422 Unprocessable Entity) für die Kommunikation mit Frontends.
+
+### 🛠️ Implementierte Laravel-Features
+
+| Feature | Zweck im Projekt |
+| :--- | :--- |
+| **Dependency Injection** | Automatisches Laden des `VignetteService` in den Controller. |
+| **Route Grouping** | Strukturierte API-Routen (z.B. `/api/v1/vignettes`). |
+| **Validation Rules** | Einsatz von Laravels Validierungs-Regeln (`required`, `email`, `string`). |
+| **Log-Maskierung** | Datenschutzkonformes Logging sensibler Daten. |
+
+> **Hinweis:** Die Datei `Laravel_Integration_Demo.php` dient als **Architektur-Blaupause**. Sie zeigt, wie die Klassen (Controller, Service, Request) in einem echten Laravel-Projekt zusammenspielen würden.
+
+---
+
 ## 💡 Warum dieser Ansatz?
 
 Als Quereinsteiger mit **6 Jahren Erfahrung in der Industrie-Logistik (Komatsu)** verfolge ich das Prinzip "Quality at Source". 
